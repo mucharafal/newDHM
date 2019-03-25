@@ -33,7 +33,7 @@ public class DistributedHashMap<K, V> {
 
             System.out.println("Before getState");
             if(synchronizationChannel.getView().size() != 1){
-                synchronizationChannel.getState();
+                synchronizationChannel.getState(null, 12000, true);
             }
             System.out.println("After getState");
             if(map == null){
@@ -49,12 +49,14 @@ public class DistributedHashMap<K, V> {
             return map.containsKey(key);
         }
 
+        @Override
         public void getState(OutputStream output) throws Exception {
             System.out.println("state get, map: " + map.size());
 
             output.write(Util.objectToByteBuffer(map));
         }
 
+        @Override
         public void setState(InputStream input) throws Exception {
             System.out.println("state set, map: " + map.size());
             map = (HashMap<K, V>)Util.objectFromStream(new DataInputStream(input));
@@ -92,9 +94,9 @@ public class DistributedHashMap<K, V> {
             if(view instanceof MergeView){
                 MergeView tmp = (MergeView)view;
                 List<View> subgroups = tmp.getSubgroups();
-                Address myAddress = channel.getAddress();
+                Address myAddress = synchronizationChannel.getAddress();
                 if(!subgroups.get(0).containsMember(myAddress)){
-                    channel.getState();
+                    synchronizationChannel.getState();
                 }
             }
         }
@@ -142,22 +144,6 @@ public class DistributedHashMap<K, V> {
     }
 
     private JChannel initializeChannel(InetAddress address) throws Exception{
-        Protocol[] protocolStack = {new UDP().setValue("mcast_group_addr", address),
-                new PING(),
-                new MERGE3(),
-                new FD_SOCK(),
-                new FD_ALL().setValue("timeout", 12000).setValue("interval", 3000),
-                new VERIFY_SUSPECT(),
-                new BARRIER(),
-                new NAKACK2(),
-                new UNICAST3(),
-                new STABLE(),
-                new GMS(),
-                new UFC(),
-                new MFC(),
-                new FRAG2(),
-                new FLUSH(),
-                new STATE()};
         UDP udp = new UDP();
         udp.setValue("mcast_group_addr", address);
         ProtocolStack stack = new ProtocolStack();
@@ -176,7 +162,9 @@ public class DistributedHashMap<K, V> {
                 .addProtocol(new GMS())
                 .addProtocol(new UFC())
                 .addProtocol(new MFC())
-                .addProtocol(new FRAG2());
+                .addProtocol(new FRAG2())
+                .addProtocol(new FLUSH())
+                .addProtocol(new STATE());
         stack.init();
         return channel;
     }
